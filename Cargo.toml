@@ -26,6 +26,10 @@ panic = "unwind"
 [profile.dev.package."*"]
 opt-level = 2
 
+# Tutorial camera moves resample the full source for every exported frame.
+[profile.dev.package.booya-core]
+opt-level = 2
+
 # Used by CI for test, build and clippy, so all three share one compile of the
 # dependencies (and of whisper.cpp) instead of three. Release speed for the
 # bench and sync probes, but with debug assertions and overflow checks kept on

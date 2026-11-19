@@ -1059,7 +1059,8 @@ pub fn camera_at_mapped(t: f64, segments: &[ZoomSegment], track: Option<&CursorT
         // A real overlap is a handoff (page zoom into a URL). A shared
         // endpoint is just two zooms that meet, and those still ease through
         // the wide shot.
-        if overlap > 40.0 && (from.reason == "typing" || to.reason == "typing") {
+        let framed_pair = from.reason == "focus" && to.reason == "focus";
+        if overlap > 40.0 && (framed_pair || from.reason == "typing" || to.reason == "typing") {
             return pan_camera(from, to, t, track, w, h, &timing, to_track);
         }
     }

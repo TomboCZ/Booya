@@ -102,7 +102,7 @@ impl Scene {
                     p.zoom.push(ZoomSegment {
                         start_ms: (a.start * 1000.0 - 250.0).max(0.0),
                         end_ms: (a.end * 1000.0 + 250.0).min(p.duration_ms),
-                        scale: (0.85 / (x2 - x1).max(y2 - y1)).clamp(1.0, 1.65),
+                        scale: (0.78 / (x2 - x1).max(y2 - y1)).clamp(1.0, 2.35),
                         follow_cursor: false,
                         focus: (
                             (x1 + x2) * width as f64 / 2.0,
@@ -136,7 +136,7 @@ impl Scene {
                 x2: bounds[2],
                 y2: bounds[3],
                 color: color.into(),
-                width: 0.005,
+                width: if matches!(a.kind, Kind::Focus) { 0.003 } else { 0.005 },
             });
         }
         (
