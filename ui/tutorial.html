@@ -24,6 +24,20 @@
         <span id="source" title=""></span>
         <button id="replace" hidden>Change recording</button>
       </div>
+      <details id="editor" hidden>
+        <summary>Edit tutorial</summary>
+        <form id="edits">
+          <fieldset id="edit-fields">
+            <legend>English narration and subtitles</legend>
+            <div id="lines"></div>
+            <h3>Keep source footage</h3>
+            <p id="range-hint"></p>
+            <div id="ranges"></div>
+            <button id="add-range" type="button">Add source interval</button>
+            <button class="primary" id="apply-edits" type="submit">Apply changes</button>
+          </fieldset>
+        </form>
+      </details>
     </section>
     <section class="export-panel">
       <h2>English Tutorial</h2>

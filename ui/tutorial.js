@@ -7,8 +7,10 @@ let selected = false;
 let ready = false;
 let busy = false;
 let captionsUrl;
+let sourceDuration = 0;
 
 function controls() {
+  byId('edit-fields').disabled = busy;
   byId('pick').disabled = busy;
   byId('replace').disabled = busy;
   byId('analyze').disabled = busy || !selected;
@@ -37,6 +39,8 @@ async function pick() {
   if (!path) return;
   ready = false;
   selected = true;
+  byId('editor').hidden = true;
+  byId('editor').open = false;
   byId('source').textContent = path.split(/[\\/]/).pop();
   byId('source').title = path;
   byId('replace').hidden = false;
@@ -44,13 +48,13 @@ async function pick() {
   preview(path);
 }
 
-async function analyze() {
-  ready = false;
+async function analyze(changes = null) {
   player.pause();
-  byId('status').textContent = 'Starting analysis…';
-  const result = await invoke('tutorial_analyze');
+  byId('status').textContent = changes ? 'Applying corrections…' : 'Starting analysis…';
+  const result = await invoke('tutorial_analyze', { changes });
   preview(result.video);
   ready = true;
+  showEditor(result.editing);
   // MP4 subtitle support varies by WebView. Use the same exported cues for preview.
   const srt = await invoke('tutorial_subtitles');
   const cues = srt.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
@@ -62,6 +66,60 @@ async function analyze() {
   track.track.mode = 'showing';
   byId('status').textContent = 'Tutorial ready to preview and export.';
 }
+
+function labeled(label, input) {
+  const wrapper = document.createElement('label');
+  wrapper.append(label, input);
+  return wrapper;
+}
+
+function addRange(start = '', end = '') {
+  const row = document.createElement('div');
+  for (const [label, value] of [['Start (s)', start], ['End (s)', end]]) {
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'number', min: '0', max: String(sourceDuration), step: 'any', required: true, value });
+    row.append(labeled(label, input));
+  }
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = 'Remove';
+  remove.onclick = () => row.remove();
+  row.append(remove);
+  byId('ranges').append(row);
+}
+
+function showEditor(editing) {
+  sourceDuration = editing.source_duration;
+  byId('range-hint').textContent = `Enter times in the original ${sourceDuration.toFixed(1)}-second recording. These intervals will be preserved in the final video.`;
+  byId('lines').replaceChildren();
+  for (const [index, line] of editing.lines.entries()) {
+    const input = document.createElement('textarea');
+    Object.assign(input, { required: true, rows: 2, value: line });
+    byId('lines').append(labeled(`Step ${index + 1}`, input));
+  }
+  byId('ranges').replaceChildren();
+  for (const [start, end] of editing.protected_ranges) addRange(start, end);
+  byId('editor').hidden = false;
+}
+
+function readChanges() {
+  const lines = Array.from(byId('lines').querySelectorAll('textarea'), item => item.value.trim());
+  if (lines.some(line => !line)) throw Error('Enter an English instruction for each step.');
+  const protected_ranges = Array.from(byId('ranges').children, row => {
+    const [start, end] = Array.from(row.querySelectorAll('input'), input => input.valueAsNumber);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= end || end > sourceDuration) {
+      throw Error('Each source interval needs a start before its end, within the recording.');
+    }
+    return [start, end];
+  });
+  return { lines, protected_ranges };
+}
+
+byId('add-range').onclick = () => addRange();
+byId('edits').onsubmit = event => {
+  event.preventDefault();
+  action(() => analyze(readChanges()));
+};
 
 async function exportFiles() {
   const path = await invoke('tutorial_export');

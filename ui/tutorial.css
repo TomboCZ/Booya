@@ -25,3 +25,15 @@ dd { margin: 1px 0 10px; }
 #status { font-size: 13px; overflow-wrap: anywhere; margin: 12px 0 0; }
 @media (max-width: 680px) { main { grid-template-columns: minmax(0,1fr); } }
 @media (prefers-color-scheme: dark) { :root { color: #e1eae5; background: #17201d; --surface: #222c28; --edge: #45534b; --muted: #afc1b9; --accent: #21786b; } }
+
+#editor { margin-top: 16px; border-top: 1px solid var(--edge); padding-top: 12px; }
+#editor summary { font-weight: 650; cursor: pointer; }
+#edit-fields { margin: 14px 0 0; padding: 0; border: 0; }
+#edit-fields legend, #edit-fields h3 { font-size: 16px; margin-bottom: 8px; font-weight: 650; }
+#lines label { display: grid; gap: 4px; margin-bottom: 8px; }
+#edit-fields label, #range-hint { font-size: 13px; color: var(--muted); }
+#edit-fields textarea, #edit-fields input { font: inherit; padding: 7px 10px; border: 1px solid var(--edge); background: var(--surface); color: inherit; border-radius: 5px; }
+#edit-fields textarea { font-size: 15px; width: 100%; resize: vertical; }
+#ranges > div { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+#ranges label { display: grid; gap: 3px; }
+#ranges input { width: 105px; }

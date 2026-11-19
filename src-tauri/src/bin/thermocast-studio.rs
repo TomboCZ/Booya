@@ -1,7 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -17,10 +17,46 @@ struct Session {
     running: bool,
 }
 
-#[derive(Clone, Serialize)]
-struct Output {
+#[derive(Clone, Serialize, Deserialize)]
+struct WorkerArtifacts {
     video: PathBuf,
     subtitles: PathBuf,
+    project: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct Editing {
+    lines: Vec<String>,
+    protected_ranges: Vec<[f64; 2]>,
+    source_duration: f64,
+}
+
+#[derive(Deserialize)]
+struct ProjectSummary {
+    sha256: String,
+    editing: Editing,
+}
+
+#[derive(Clone, Serialize)]
+struct Output {
+    #[serde(flatten)]
+    files: WorkerArtifacts,
+    editing: Editing,
+    #[serde(skip)]
+    source_sha256: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct Corrections {
+    lines: Vec<String>,
+    protected_ranges: Vec<[f64; 2]>,
+}
+
+#[derive(Serialize)]
+struct EditRequest {
+    #[serde(flatten)]
+    changes: Corrections,
+    source_sha256: String,
 }
 
 async fn background<T: Send + 'static>(
@@ -60,7 +96,7 @@ async fn tutorial_import(app: AppHandle) -> Result<Option<PathBuf>, String> {
     .await
 }
 
-fn run_worker(app: &AppHandle, source: &Path) -> Result<Output> {
+fn run_worker(app: &AppHandle, source: &Path, edits: Option<EditRequest>) -> Result<Output> {
     let python_relative = if cfg!(windows) {
         ".venv/Scripts/python.exe"
     } else {
@@ -87,22 +123,35 @@ fn run_worker(app: &AppHandle, source: &Path) -> Result<Output> {
         .unwrap_or_else(|| root.join(python_relative));
     let output = root.join("outputs");
     std::fs::create_dir_all(&output)?;
-    let mut child = booya_core::proc::command(python)
+    let mut command = booya_core::proc::command(python);
+    command
         .args(["-u", "-m", "thermocast", "run"])
         .arg(source)
         .arg("--output-dir")
         .arg(&output)
         .arg("--profile")
         .arg(tutorial_profile())
-        .current_dir(root)
-        .stdin(Stdio::null())
+        .current_dir(root);
+    if edits.is_some() {
+        command.arg("--edits-stdin").stdin(Stdio::piped());
+    } else {
+        command.stdin(Stdio::null());
+    }
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
         .context("start analysis worker")?;
 
     let mut result = None;
-    let mut error = None;
+    let mut error = if let Some(request) = edits {
+        let pipe = child.stdin.take().context("open worker edits pipe")?;
+        serde_json::to_writer(pipe, &request)
+            .err()
+            .map(|e| format!("send corrections: {e}"))
+    } else {
+        None
+    };
     let reader = BufReader::new(child.stdout.take().context("open worker output")?);
     for line in reader.lines() {
         let line = match line {
@@ -128,12 +177,7 @@ fn run_worker(app: &AppHandle, source: &Path) -> Result<Output> {
                 )
             }
             Some("result") => {
-                if let (Some(v), Some(s)) = (event["video"].as_str(), event["subtitles"].as_str()) {
-                    result = Some(Output {
-                        video: v.into(),
-                        subtitles: s.into(),
-                    });
-                }
+                result = serde_json::from_value::<WorkerArtifacts>(event).ok();
             }
             _ => {}
         }
@@ -145,35 +189,55 @@ fn run_worker(app: &AppHandle, source: &Path) -> Result<Output> {
     ensure!(status.success(), "Analysis worker exited with {status}");
     let result = result.context("worker did not return a video")?;
     let base = output.canonicalize()?;
-    for path in [&result.video, &result.subtitles] {
+    for path in [&result.video, &result.subtitles, &result.project] {
         ensure!(
             path.is_file() && path.canonicalize()?.starts_with(&base),
             "worker returned an invalid artifact"
         );
     }
     app.asset_protocol_scope().allow_file(&result.video)?;
-    Ok(result)
+    let project: ProjectSummary = serde_json::from_reader(std::fs::File::open(&result.project)?)
+        .context("read editable tutorial project")?;
+    Ok(Output {
+        files: result,
+        editing: project.editing,
+        source_sha256: project.sha256,
+    })
 }
 
 #[tauri::command]
-async fn tutorial_analyze(app: AppHandle) -> Result<Output, String> {
+async fn tutorial_analyze(app: AppHandle, changes: Option<Corrections>) -> Result<Output, String> {
     background(move || {
         let state = app.state::<Mutex<Session>>();
-        let source = {
+        let (source, edits) = {
             let mut session = state.lock().map_err(|_| anyhow!("session unavailable"))?;
             ensure!(!session.running, "Analysis already running");
             let path = session
                 .selected
                 .clone()
                 .context("Import a recording first")?;
+            let edits = match changes {
+                Some(changes) => {
+                    let last = session
+                        .result
+                        .as_ref()
+                        .context("Analyze a recording before editing")?;
+                    Some(EditRequest {
+                        changes,
+                        source_sha256: last.source_sha256.clone(),
+                    })
+                }
+                None => None,
+            };
             session.running = true;
-            session.result = None;
-            path
+            (path, edits)
         };
-        let result = run_worker(&app, &source);
+        let result = run_worker(&app, &source, edits);
         let mut session = state.lock().map_err(|_| anyhow!("session unavailable"))?;
         session.running = false;
-        session.result = result.as_ref().ok().cloned();
+        if let Ok(output) = &result {
+            session.result = Some(output.clone());
+        }
         result
     })
     .await
@@ -184,7 +248,7 @@ fn tutorial_subtitles(app: AppHandle) -> Result<String, String> {
     let state = app.state::<Mutex<Session>>();
     let session = state.lock().map_err(|_| "session unavailable")?;
     let output = session.result.as_ref().ok_or("No completed tutorial")?;
-    std::fs::read_to_string(&output.subtitles).map_err(|e| e.to_string())
+    std::fs::read_to_string(&output.files.subtitles).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -210,8 +274,8 @@ async fn tutorial_export(app: AppHandle) -> Result<Option<PathBuf>, String> {
         let staged = booya_core::fsutil::sibling_tmp(&folder.join("English Tutorial"));
         std::fs::create_dir(&staged)?;
         let export = (|| -> Result<PathBuf> {
-            std::fs::copy(&result.video, staged.join("English Tutorial.mp4"))?;
-            std::fs::copy(&result.subtitles, staged.join("English Tutorial.srt"))?;
+            std::fs::copy(&result.files.video, staged.join("English Tutorial.mp4"))?;
+            std::fs::copy(&result.files.subtitles, staged.join("English Tutorial.srt"))?;
             for index in 1.. {
                 let name = if index == 1 {
                     "English Tutorial".into()
