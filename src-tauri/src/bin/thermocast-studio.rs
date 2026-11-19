@@ -3,7 +3,6 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use serde::Serialize;
 use serde_json::Value;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -62,17 +61,31 @@ async fn tutorial_import(app: AppHandle) -> Result<Option<PathBuf>, String> {
 }
 
 fn run_worker(app: &AppHandle, source: &Path) -> Result<Output> {
-    let root = std::env::var_os("THERMOCAST_ROOT")
-        .context("Launch ThermoCast using its project launcher")?;
-    let python =
-        std::env::var_os("THERMOCAST_PYTHON").context("Python worker is not configured")?;
-    let mut hash = DefaultHasher::new();
-    source.hash(&mut hash);
-    let output = app
-        .path()
-        .app_local_data_dir()?
-        .join("projects")
-        .join(format!("{:016x}", hash.finish()));
+    let python_relative = if cfg!(windows) {
+        ".venv/Scripts/python.exe"
+    } else {
+        ".venv/bin/python"
+    };
+    let root = match std::env::var_os("THERMOCAST_ROOT") {
+        Some(path) => PathBuf::from(path),
+        None => {
+            let executable = std::env::current_exe()?;
+            executable
+                .ancestors()
+                .find(|dir| {
+                    dir.join("thermocast/__main__.py").is_file()
+                        && dir.join(python_relative).is_file()
+                })
+                .context(
+                    "Keep the desktop build inside the ThermoCast project and initialize its .venv",
+                )?
+                .to_path_buf()
+        }
+    };
+    let python = std::env::var_os("THERMOCAST_PYTHON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join(python_relative));
+    let output = root.join("outputs");
     std::fs::create_dir_all(&output)?;
     let mut child = booya_core::proc::command(python)
         .args(["-u", "-m", "thermocast", "run"])

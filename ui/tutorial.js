@@ -71,7 +71,10 @@ byId('pick').onclick = byId('replace').onclick = () => action(pick);
 byId('analyze').onclick = () => action(analyze);
 byId('export').onclick = () => action(exportFiles);
 window.__TAURI__.event.listen('tutorial-progress', ({payload}) => {
-  byId('status').textContent = payload.message || payload.stage;
+  const labels = { import: 'Import', transcribe: 'Transcription', vision: 'GUI detection',
+    plan: 'Tutorial script', render: 'Rendering', export: 'Export' };
+  const label = labels[payload.stage] || (payload.stage?.startsWith('voice-') ? 'English narration' : payload.stage);
+  byId('status').textContent = [label, payload.message].filter(Boolean).join(' · ');
 });
 invoke('tutorial_profile').then(profile => {
   if (profile === 'fixture') byId('privacy').textContent = 'Offline fixture profile for testing the tutorial workflow.';
