@@ -37,3 +37,17 @@ dd { margin: 1px 0 10px; }
 #ranges > div { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 #ranges label { display: grid; gap: 3px; }
 #ranges input { width: 105px; }
+
+#formats { border: 0; padding: 0; margin: 20px 0 8px; }
+#formats legend { font-weight: 650; margin-bottom: 6px; }
+#formats label { display: block; padding: 3px 0; font-size: 14px; }
+.library { border-top: 1px solid var(--edge); margin-top: 24px; padding-top: 16px; }
+.library h2 { margin: 0; }
+.library p, .library li span { color: var(--muted); font-size: 13px; }
+.library .warning { color: inherit; border-inline-start: 3px solid #c88726; padding-inline-start: 8px; }
+#recordings { list-style: none; padding: 0; }
+#recordings li { margin: 12px 0; border-bottom: 1px solid var(--edge); padding-bottom: 12px; }
+#recordings li strong, #recordings li span { display: block; overflow-wrap: anywhere; }
+#recordings button { font-size: 13px; margin: 6px 6px 0 0; }
+dialog { max-width: 400px; border: 1px solid var(--edge); border-radius: 8px; background: var(--surface); color: inherit; }
+dialog::backdrop { background: #1118; }

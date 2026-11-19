@@ -38,15 +38,39 @@
           </fieldset>
         </form>
       </details>
+      <section class="library" aria-labelledby="cache-title">
+        <h2 id="cache-title">Saved recordings</h2>
+        <p id="cache-size" aria-live="polite"></p>
+        <p id="cache-warning" class="warning" role="status" hidden></p>
+        <ul id="recordings"></ul>
+        <button id="sync" type="button">Refresh library</button>
+      </section>
     </section>
     <section class="export-panel">
       <h2>English Tutorial</h2>
-      <dl><dt>Source language</dt><dd>Czech</dd><dt>Narration</dt><dd>English · AI voice</dd><dt>Subtitles</dt><dd>English</dd><dt>Export</dt><dd>MP4 + SRT</dd></dl>
+      <dl><dt>Source language</dt><dd>Czech</dd><dt>Narration</dt><dd>English · AI voice</dd><dt>Subtitles</dt><dd>English</dd></dl>
       <p class="note" id="privacy">Analysis sends audio, transcript and selected frames to OpenAI.</p>
       <button id="analyze" class="primary" disabled>Analyze recording</button>
+      <fieldset id="formats"><legend>Export formats</legend>
+        <label><input type="checkbox" value="mp4" checked> MP4 video + subtitles</label>
+        <label><input type="checkbox" value="gif"> Animated GIF</label>
+        <label><input type="checkbox" value="gif-captioned"> GIF with caption strip</label>
+        <label><input type="checkbox" value="markdown"> Markdown manual</label>
+        <label><input type="checkbox" value="pdf"> PDF manual</label>
+        <label><input type="checkbox" value="png"> PNG screenshots</label>
+        <label><input type="checkbox" value="html"> Offline HTML</label>
+        <label><input type="checkbox" value="webm"> WebM video</label>
+        <label><input type="checkbox" value="srt"> SRT subtitles</label>
+        <label><input type="checkbox" value="vtt"> WebVTT subtitles</label>
+      </fieldset>
       <button id="export" disabled>Export files…</button>
       <p id="status" role="status" aria-live="polite"></p>
     </section>
   </main>
+  <dialog id="confirm-clear">
+    <form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p>
+      <button value="cancel" autofocus>Cancel</button><button value="clear">Remove</button>
+    </form>
+  </dialog>
 </body>
 </html>
