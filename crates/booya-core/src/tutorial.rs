@@ -46,6 +46,8 @@ struct Annotation {
     #[serde(rename = "box")]
     bounds: [f64; 4],
     point: Option<[f64; 2]>,
+    camera_box: Option<[f64; 4]>,
+    outline_windows: Option<Vec<[f64; 2]>>,
 }
 
 impl Scene {
@@ -70,6 +72,27 @@ impl Scene {
                 a.bounds.iter().all(|v| (0.0..=1.0).contains(v)) && x1 < x2 && y1 < y2,
                 "invalid source box"
             );
+            if let Some([l, t, r, b]) = a.camera_box {
+                ensure!(
+                    0.0 <= l
+                        && l <= x1
+                        && x2 <= r
+                        && r <= 1.0
+                        && 0.0 <= t
+                        && t <= y1
+                        && y2 <= b
+                        && b <= 1.0,
+                    "camera context must contain its subject"
+                );
+            }
+            if let Some(windows) = &a.outline_windows {
+                ensure!(
+                    windows
+                        .iter()
+                        .all(|[l, r]| a.start <= *l && l < r && *r <= a.end),
+                    "invalid outline interval"
+                );
+            }
             if matches!(a.kind, Kind::Click) {
                 ensure!(
                     a.point
@@ -96,13 +119,14 @@ impl Scene {
         p.style.glass.enabled = false;
         let mut shapes = Vec::new();
         for a in &self.annotations {
-            let [x1, y1, x2, y2] = a.bounds;
+            let [x1, y1, x2, y2] = a.camera_box.unwrap_or(a.bounds);
             let (kind, bounds, color) = match a.kind {
                 Kind::Focus => {
+                    let coverage = if a.camera_box.is_some() { 0.94 } else { 0.78 };
                     p.zoom.push(ZoomSegment {
                         start_ms: (a.start * 1000.0 - 250.0).max(0.0),
                         end_ms: (a.end * 1000.0 + 250.0).min(p.duration_ms),
-                        scale: (0.78 / (x2 - x1).max(y2 - y1)).clamp(1.0, 2.35),
+                        scale: (coverage / (x2 - x1).max(y2 - y1)).clamp(1.0, 2.35),
                         follow_cursor: false,
                         focus: (
                             (x1 + x2) * width as f64 / 2.0,
@@ -127,17 +151,24 @@ impl Scene {
                     )
                 }
             };
-            shapes.push(Shape {
-                kind,
-                start_ms: a.start * 1000.0,
-                end_ms: a.end * 1000.0,
-                x1: bounds[0],
-                y1: bounds[1],
-                x2: bounds[2],
-                y2: bounds[3],
-                color: color.into(),
-                width: if matches!(a.kind, Kind::Focus) { 0.003 } else { 0.005 },
-            });
+            let default_window = [[a.start, a.end]];
+            for &[start, end] in a.outline_windows.as_deref().unwrap_or(&default_window) {
+                shapes.push(Shape {
+                    kind,
+                    start_ms: start * 1000.0,
+                    end_ms: end * 1000.0,
+                    x1: bounds[0],
+                    y1: bounds[1],
+                    x2: bounds[2],
+                    y2: bounds[3],
+                    color: color.into(),
+                    width: if matches!(a.kind, Kind::Focus) {
+                        0.003
+                    } else {
+                        0.005
+                    },
+                });
+            }
         }
         (
             Renderer::new(p, None, plan.width, plan.height, None),
