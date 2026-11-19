@@ -30,6 +30,7 @@ pub mod touch;
 pub mod splice;
 pub mod syncprobe;
 pub mod zoom;
+pub mod tutorial;
 
 pub use events::{Event, EventKind, EventLog};
 pub use project::Project;

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ThermoCast Studio</title>
+  <link rel="stylesheet" href="tutorial.css">
+  <script src="tutorial.js" defer></script>
+</head>
+<body>
+  <header><span class="mark" aria-hidden="true">Tc</span><strong>ThermoCast Studio</strong></header>
+  <main>
+    <section class="workspace">
+      <h1>English tutorial</h1>
+      <div class="media">
+        <div id="empty">
+          <p>Import a screen recording with Czech commentary.</p>
+          <button id="pick" class="primary">Import recording</button>
+          <small>MP4 or MOV · 15–120 seconds</small>
+        </div>
+        <video id="player" controls playsinline hidden></video>
+      </div>
+      <div class="toolbar">
+        <span id="source" title=""></span>
+        <button id="replace" hidden>Change recording</button>
+      </div>
+    </section>
+    <section class="export-panel">
+      <h2>English Tutorial</h2>
+      <dl><dt>Source language</dt><dd>Czech</dd><dt>Narration</dt><dd>English · AI voice</dd><dt>Subtitles</dt><dd>English</dd><dt>Export</dt><dd>MP4 + SRT</dd></dl>
+      <p class="note" id="privacy">Analysis sends audio, transcript and selected frames to OpenAI.</p>
+      <button id="analyze" class="primary" disabled>Analyze recording</button>
+      <button id="export" disabled>Export files…</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>

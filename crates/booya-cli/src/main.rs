@@ -32,6 +32,7 @@ USAGE:
   booya preview <project.json> --at MS [-o frame.png] [--quality 720]
   booya export <project.json> -o out.mp4|out.webm|out.gif [--aspect 16:9|9:16|1:1]
                   [--quality 720|1080|1440|2160] [--fps 30]
+  booya tutorial-render --plan plan.json --output video.mp4
   booya trim <project.json> START_MS END_MS
   booya split <project.json> AT_MS
   booya speed <project.json> CLIP_INDEX SPEED
@@ -100,6 +101,11 @@ fn run() -> Result<()> {
     }
     match cmd.as_str() {
         "record" => record(a),
+        "tutorial-render" => {
+            let plan = a.opt(&["--plan"]).context("missing --plan")?;
+            let output = a.opt(&["--output"]).context("missing --output")?;
+            booya_core::tutorial::render(Path::new(&plan), Path::new(&output))
+        }
         "doctor" => {
             let secs: f64 = a.opt(&["--seconds"]).map(|v| v.parse()).transpose()?.unwrap_or(3.0);
             if a.flag("--audio") {

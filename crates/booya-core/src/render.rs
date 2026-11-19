@@ -1437,7 +1437,7 @@ impl Renderer {
                 self.draw_caption(&mut out, c, src_t);
             }
         }
-        self.draw_shapes(&mut out, src_t);
+        Self::draw_shapes(&mut out, &self.project.shapes, src_t);
         self.draw_callouts(&mut out, src_t);
         self.draw_watermark(&mut out);
         if let (Some(pane), Some(c)) = (sc.cam.filter(|c| c.floating), cam_frame) {
@@ -1447,11 +1447,11 @@ impl Renderer {
     }
 
     /// Arrows, boxes, ellipses and highlights, anti-aliased, fading in and out.
-    fn draw_shapes(&self, out: &mut Frame, src_t: f64) {
+    pub(crate) fn draw_shapes(out: &mut Frame, shapes: &[crate::project::Shape], src_t: f64) {
         use crate::project::ShapeKind;
-        let (w, h) = (self.out_w as f64, self.out_h as f64);
+        let (w, h) = (out.w as f64, out.h as f64);
         let short = w.min(h);
-        for s in &self.project.shapes {
+        for s in shapes {
             if src_t < s.start_ms || src_t > s.end_ms {
                 continue;
             }
