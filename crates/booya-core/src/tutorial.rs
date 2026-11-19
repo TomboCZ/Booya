@@ -62,7 +62,7 @@ impl Scene {
         );
         for a in &self.annotations {
             ensure!(
-                a.start >= 0.0 && a.end > a.start && a.end <= self.duration() + 0.001,
+                a.start >= 0.0 && a.end > a.start && a.end <= self.duration() + 1.0 / FPS,
                 "annotation outside its scene"
             );
             let [x1, y1, x2, y2] = a.bounds;

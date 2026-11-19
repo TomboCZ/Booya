@@ -1,5 +1,6 @@
 [package]
 name = "booya-app"
+default-run = "booya-app"
 description = "Booya desktop editor (Tauri 2)"
 version.workspace = true
 edition.workspace = true
