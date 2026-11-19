@@ -18,6 +18,8 @@ function controls() {
   byId('replace').disabled = busy;
   byId('analyze').disabled = busy || !selected;
   byId('export').disabled = busy || !ready || !formats().length;
+  byId('export-elsewhere').disabled = byId('export').disabled;
+  byId('reveal-preview').hidden = !ready;
   byId('formats').disabled = busy;
   byId('sync').disabled = busy;
 }
@@ -44,6 +46,7 @@ async function pick() {
   if (!path) return;
   ready = false;
   activeId = null;
+  showLocation(null);
   selected = true;
   byId('editor').hidden = true;
   byId('editor').open = false;
@@ -63,6 +66,7 @@ async function analyze(changes = null) {
 
 async function showResult(result) {
   preview(result.video);
+  if (activeId !== result.source_sha256) showLocation(null);
   activeId = result.source_sha256;
   ready = true;
   showEditor(result.editing);
@@ -76,7 +80,7 @@ async function showResult(result) {
   Object.assign(track, { kind: 'subtitles', srclang: 'en', label: 'English', src: captionsUrl, default: true });
   player.append(track);
   track.track.mode = 'showing';
-  byId('status').textContent = 'Tutorial ready to preview and export.';
+  byId('status').textContent = 'Tutorial ready.';
 }
 
 function labeled(label, input) {
@@ -133,13 +137,31 @@ byId('edits').onsubmit = event => {
   action(() => analyze(readChanges()));
 };
 
-async function exportFiles() {
-  const path = await invoke('tutorial_export', { formats: formats() });
-  if (path) byId('status').textContent = 'Exported to ' + path;
+function showLocation(path) {
+  byId('last-export').hidden = !path;
+  byId('export-path').textContent = path || '';
+  byId('reveal-preview').textContent = path ? 'Open result folder' : 'Show preview video';
+}
+
+function showFiles(target, id = null) {
+  return invoke('tutorial_show_files', {target, id});
+}
+
+async function exportFiles(chooseFolder) {
+  const path = await invoke('tutorial_export', {formats: formats(), chooseFolder});
+  if (path) {
+    showLocation(path);
+    byId('status').textContent = 'Export complete.';
+  }
 }
 byId('pick').onclick = byId('replace').onclick = () => action(pick);
 byId('analyze').onclick = () => action(analyze);
-byId('export').onclick = () => action(exportFiles);
+byId('export').onclick = () => action(() => exportFiles(false));
+byId('export-elsewhere').onclick = () => action(() => exportFiles(true));
+byId('show-outputs').onclick = () => action(() => showFiles('outputs'));
+byId('reveal-preview').onclick = () => action(() => byId('last-export').hidden
+  ? showFiles('preview') : showFiles('export', activeId));
+byId('show-export').onclick = () => action(() => showFiles('export', activeId));
 window.__TAURI__.event.listen('tutorial-progress', ({payload}) => {
   const labels = { import: 'Import', transcribe: 'Transcription', vision: 'GUI detection',
     plan: 'Tutorial script', render: 'Rendering', export: 'Export' };
@@ -200,6 +222,7 @@ async function clearEntry(entry, scope) {
   }
   if (current) {
     activeId = null; ready = false; selected = false;
+    showLocation(null);
     player.hidden = true;
     byId('empty').hidden = false;
     byId('editor').hidden = true;
@@ -228,6 +251,7 @@ async function refreshLibrary() {
     byId('cache-warning').hidden = !messages.length;
     if (activeId && ready && !busy) {
       const current = data.entries.find(e => e.id === activeId);
+      showLocation(current?.last_export);
       if (!current) {
         selected = ready = false; activeId = null;
         player.pause(); player.removeAttribute('src'); player.load(); player.hidden = true;
@@ -245,6 +269,7 @@ async function refreshLibrary() {
       info.textContent = bytes(e.bytes) + ' · Source ' + e.source_state + ' · ' + bytes(e.derived_bytes) + ' rebuildable (' + bytes(e.reclaimable_bytes) + ' unshared)';
       li.append(title, info);
       if (e.ready) li.append(libraryButton('Open tutorial', () => restore(e)));
+      if (e.last_export) li.append(libraryButton('Open export folder', () => showFiles('export', e.id)));
       if (!e.ready && e.resumable) li.append(libraryButton('Resume analysis', async () => {
         const response = await invoke('tutorial_resume', {id:e.id});
         selected = Boolean(response.source);

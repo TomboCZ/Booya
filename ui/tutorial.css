@@ -51,3 +51,6 @@ dd { margin: 1px 0 10px; }
 #recordings button { font-size: 13px; margin: 6px 6px 0 0; }
 dialog { max-width: 400px; border: 1px solid var(--edge); border-radius: 8px; background: var(--surface); color: inherit; }
 dialog::backdrop { background: #1118; }
+
+#last-export { border-top: 1px solid var(--edge); padding-top: 12px; margin-top: 16px; }
+#export-path { font-size: 13px; overflow-wrap: anywhere; user-select: text; margin: 4px 0; }

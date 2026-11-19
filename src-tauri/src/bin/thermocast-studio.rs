@@ -77,9 +77,12 @@ fn tutorial_profile() -> String {
 #[tauri::command]
 async fn tutorial_import(app: AppHandle) -> Result<Option<PathBuf>, String> {
     background(move || {
+        let inputs = worker_paths()?.0.join("inputs");
+        std::fs::create_dir_all(&inputs)?;
         let Some(file) = app
             .dialog()
             .file()
+            .set_directory(inputs)
             .add_filter("Screen recording", &["mp4", "mov"])
             .blocking_pick_file()
         else {
@@ -369,34 +372,44 @@ async fn tutorial_clear(app: AppHandle, id: String, scope: String) -> Result<Val
 }
 
 #[tauri::command]
-async fn tutorial_export(app: AppHandle, formats: Vec<String>) -> Result<Option<PathBuf>, String> {
+async fn tutorial_export(
+    app: AppHandle,
+    formats: Vec<String>,
+    choose_folder: Option<bool>,
+) -> Result<Option<PathBuf>, String> {
     background(move || {
-        let project = app
-            .state::<Mutex<Session>>()
-            .lock()
-            .map_err(|_| anyhow!("session unavailable"))?
-            .result
-            .as_ref()
-            .context("Open a tutorial first")?
-            .files
-            .project
-            .clone();
+        let (project, source) = {
+            let binding = app.state::<Mutex<Session>>();
+            let session = binding.lock().map_err(|_| anyhow!("session unavailable"))?;
+            let result = session.result.as_ref().context("Open a tutorial first")?;
+            (result.files.project.clone(), session.selected.clone())
+        };
         ensure!(!formats.is_empty(), "Choose an export format");
-        let Some(folder) = app
-            .dialog()
-            .file()
-            .set_title("Export English Tutorial to folder")
-            .blocking_pick_folder()
-        else {
-            return Ok(None);
+        let default_folder = worker_paths()?.0.join("outputs");
+        let folder = if choose_folder.unwrap_or(false) {
+            let Some(chosen) = app
+                .dialog()
+                .file()
+                .set_title("Choose where to save your export")
+                .set_directory(&default_folder)
+                .blocking_pick_folder()
+            else {
+                return Ok(None);
+            };
+            chosen.into_path()?
+        } else {
+            default_folder
         };
         let mut args = vec![
             "export".into(),
             "--project".into(),
             project.into_os_string(),
             "--output-dir".into(),
-            folder.into_path()?.into_os_string(),
+            folder.into_os_string(),
         ];
+        if let Some(source) = source {
+            args.extend(["--source".into(), source.into_os_string()]);
+        }
         for format in formats {
             args.extend(["--format".into(), format.into()]);
         }
@@ -410,6 +423,90 @@ async fn tutorial_export(app: AppHandle, formats: Vec<String>) -> Result<Option<
     .await
 }
 
+#[tauri::command]
+async fn tutorial_show_files(
+    app: AppHandle,
+    target: String,
+    id: Option<String>,
+) -> Result<(), String> {
+    background(move || {
+        let path = match target.as_str() {
+            "outputs" => {
+                let folder = worker_paths()?.0.join("outputs");
+                std::fs::create_dir_all(&folder)?;
+                folder
+            }
+            "export" => {
+                let digest = id.context("Select a recording")?;
+                let event = worker(
+                    &app,
+                    vec!["cache".into(), "export-location".into(), digest.into()],
+                    None,
+                )?;
+                PathBuf::from(
+                    event["directory"]
+                        .as_str()
+                        .context("Missing export folder")?,
+                )
+            }
+            "preview" => {
+                let binding = app.state::<Mutex<Session>>();
+                let session = binding.lock().map_err(|_| anyhow!("session unavailable"))?;
+                session
+                    .result
+                    .as_ref()
+                    .context("Open a tutorial first")?
+                    .files
+                    .video
+                    .clone()
+            }
+            _ => bail!("Unknown file location"),
+        }
+        .canonicalize()
+        .context("The file or folder was moved")?;
+        // Only a direct desktop button press reaches the operating system's file manager.
+        #[cfg(target_os = "macos")]
+        {
+            let mut command = std::process::Command::new("/usr/bin/open");
+            if path.is_file() {
+                command.arg("-R");
+            }
+            ensure!(
+                command.arg(path).status()?.success(),
+                "Finder could not show the result"
+            );
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let mut command = std::process::Command::new("explorer.exe");
+            // Explorer handles directory paths natively, including spaces and UNC shares.
+            let directory = if path.is_file() {
+                path.parent().context("Missing video folder")?
+            } else {
+                &path
+            };
+            command.arg(directory).spawn()?;
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            let directory = if path.is_file() {
+                path.parent().context("Missing video folder")?
+            } else {
+                &path
+            };
+            std::process::Command::new("xdg-open")
+                .arg(directory)
+                .spawn()?;
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[cfg(debug_assertions)]
+#[path = "../thermocast_ui_check.rs"]
+mod ui_check;
+
 fn main() {
     let mut context = tauri::generate_context!();
     let config = context.config_mut();
@@ -420,7 +517,10 @@ fn main() {
     window.url = tauri::WebviewUrl::App("tutorial.html".into());
     window.min_width = Some(580.0);
     window.min_height = Some(480.0);
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(debug_assertions)]
+    let builder = ui_check::configure(builder, window);
+    builder
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(Session::default()))
         .invoke_handler(tauri::generate_handler![
@@ -429,6 +529,7 @@ fn main() {
             tutorial_analyze,
             tutorial_subtitles,
             tutorial_export,
+            tutorial_show_files,
             tutorial_cache,
             tutorial_resume,
             tutorial_restore,
